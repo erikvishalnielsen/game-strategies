@@ -36,8 +36,28 @@ module Exercises = struct
   ;;
 
   let print_game (game : Game.t) =
-    ignore game;
-    print_endline ""
+    match game.game_kind with 
+    | Tic_tac_toe -> (
+      let board = List.init 3 ~f:(fun x -> 
+        List.init 3 ~f:(fun y -> 
+          match (Map.find game.board {Game.Position.row = x; column = y}) with 
+          | Some O -> "O"
+          | Some X -> "X"
+          | None -> " "
+        )
+      ) in
+      List.iteri board ~f:(fun x row -> 
+        List.iteri row ~f:(fun y item -> 
+          print_string (item);
+          if (y = 0 || y = 1) then print_string " | " else print_string "");
+
+        if (x = 0 || x = 1) then (
+            print_endline "";
+            print_endline "---------")
+          else print_endline ""
+        )
+      )
+    | Omok -> failwith "Not implemented yet . . ."
   ;;
 
   let%expect_test "print_win_for_x" =
@@ -67,9 +87,21 @@ module Exercises = struct
   ;;
 
   (* Exercise 1 *)
+  (* None goes to true and false is to filled up *)
   let available_moves (game : Game.t) : Game.Position.t list =
-    ignore game;
-    failwith "Implement me!"
+    match game.game_kind with 
+    | Tic_tac_toe -> (
+      let nineList = [[0;1;2];[3;4;5];[6;7;8]] in
+      let posList = [] in
+      let newPosList = List.foldi nineList ~f:(fun x currList listRow -> (List.foldi listRow ~f:(fun y currList _listItem -> 
+        match Map.find game.board {Game.Position.row = x; column = y} with 
+        | None -> currList @ [{Game.Position.row = x; column = y}]
+        | _ -> posList
+        
+        ) ~init:(currList))) ~init:(posList) in
+      newPosList
+    )
+    | Omok -> failwith "Game type not implemented"
   ;;
 
   (* Exercise 2 *)
@@ -160,20 +192,39 @@ module Exercises = struct
   ;;
 end
 
+
+let handle_take_turn (_client : unit) (_query)=
+  let piece = Game.Piece.X in
+  let position = {Game.Position.row = 0; column = 0} in
+  let response = {Rpcs.Take_turn.Response.piece; position} in
+  print_s [%message "Response" (response : Rpcs.Take_turn.Response.t)]; 
+  return (response)
+;;
+
 let command_play =
   Command.async
     ~summary:"Play"
     (let%map_open.Command () = return ()
-     and controller =
-       flag "-controller" (required host_and_port) ~doc:"_ host_and_port of controller"
      and port = flag "-port" (required int) ~doc:"_ port to listen on" in
      fun () ->
        (* We should start listing on the supplied [port], ready to handle incoming
           queries for [Take_turn] and [Game_over]. We should also connect to the
           controller and send a [Start_game] to initiate the game. *)
-       ignore controller;
-       ignore port;
-       return ())
+        let%bind server =
+        let implementations = Rpc.Implementations.create_exn
+        ~on_unknown_rpc:`Close_connection
+        ~implementations:[Rpc.Rpc.implement Rpcs.Take_turn.rpc handle_take_turn]
+     in
+          Rpc.Connection.serve
+            ~implementations
+            ~initial_connection_state:(fun _client_identity _client_addr ->
+              (* This constructs the "client" values which are passed to the
+                 implementation function above. We're just using unit for now. *)
+              ())
+            ~where_to_listen:(Tcp.Where_to_listen.of_port port)
+            ()
+        in
+        Tcp.Server.close_finished server)
 ;;
 
 let command =
