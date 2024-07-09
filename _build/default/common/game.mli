@@ -71,7 +71,7 @@ module Evaluation : sig
     | Illegal_move
     | Game_continues
     | Game_over of { winner : Piece.t option }
-  [@@deriving sexp_of, bin_io]
+  [@@deriving sexp_of, bin_io, equal]
 end
 
 type t =
