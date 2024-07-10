@@ -612,23 +612,66 @@ module Exercises = struct
     | _ -> []
   ;;
 
-  let solve (game : Game.t) = 
-    0
+  let heuristic ~(me : Game.Piece.t) (game : Game.t) ~isMax ~depth = 
+    let getLosingMovesMe = losing_moves ~me:me game in
+    let getWinningMovesMe = winning_moves ~me:me game in
+    let getLosingMovesOpp = losing_moves ~me:(Game.Piece.flip me) game in
+    let getWinningMovesOpp = winning_moves ~me:(Game.Piece.flip me) game in
+    match isMax with 
+    | true -> (
+      (* MY TURN *)
+      match List.length getWinningMovesMe with 
+      | 0 -> (match List.length getLosingMovesMe with 
+        | 0 -> 10 * depth
+        | 1 -> -10 * depth
+        | _ -> -10000 * depth)
+      | _ -> 10000 * depth
+    )
+    | false -> (
+      (* OPP TURN *)
+      match List.length getWinningMovesOpp with 
+      | 0 -> (match List.length getLosingMovesOpp with 
+        | 0 -> -10 * depth
+        | 1 -> 10 * depth
+        | _ -> 10000 * depth)
+      | _ -> -10000 * depth
+    )
   ;;
 
-  (* TRUE IS MAX FALSE IS MIN*)
-  let minimax ?(depth=3) ~(me : Game.Piece.t) (game : Game.t) minOrMax = 
-    let curr_heuristic = solve game in
+  (* TRUE IS MAX FALSE IS MIN. MAX IS ALWAYS ME*)
+  let rec minimax ~depth ~(me : Game.Piece.t) (game : Game.t) isMax = 
+    let curr_heuristic = heuristic ~me:me game ~isMax:isMax ~depth:depth in
     match depth = 0, evaluate game with 
-    | true, _ -> curr_heuristic
     | _, Game.Evaluation.Game_over {winner} -> (
       match winner with
       | None -> 0
-      | Some winnerPiece -> match (Game.Piece.equal me winnerPiece) with | true -> Int.max_value | false -> Int.min_value)
+      | Some winnerPiece -> match (Game.Piece.equal me winnerPiece) with | true -> 10000 * depth | false -> -10000 * depth)
+    | true, _ -> curr_heuristic
     | _ -> (
-      
+      match isMax with
+      | true -> (
+        List.fold (available_moves game) ~init:(-10000 * depth) ~f:(fun value pos -> 
+          let newGame = 
+            place_piece game ~piece:(me) ~position:({ Game.Position.row = pos.row; column = pos.column })
+          in
+        (Int.max (value) (minimax ~depth:(depth-1) ~me:me newGame (not isMax)))))
+      | false -> (
+        List.fold (available_moves game) ~init:(10000 * depth) ~f:(fun value pos -> 
+          let newGame = 
+            place_piece game ~piece:(Game.Piece.flip me) ~position:({ Game.Position.row = pos.row; column = pos.column })
+          in
+        (Int.min (value) (minimax ~depth:(depth-1) ~me:me newGame (not isMax)))))
     )
-    
+  ;;
+
+  let findNextMove ~(me : Game.Piece.t) (game : Game.t) =
+    let allMoves = available_moves game in
+    let rankedMoves = (List.sort allMoves ~compare:(fun move1 move2 -> 
+      let newGame1 = place_piece game ~piece:(me) ~position:(move1) in
+      let newGame2 = place_piece game ~piece:(me) ~position:(move2) in
+      if ((minimax ~depth:5 ~me:me newGame1 false) < (minimax ~depth:5 ~me:me newGame2 false)) then 1 else -1
+    )) in 
+    List.hd_exn rankedMoves (* IF ERROR ITS PROLLY THIS *)
   ;;
 
   let exercise_one =
@@ -702,6 +745,17 @@ module Exercises = struct
          return ())
   ;;
 
+  let exercise_six =
+    Command.async
+      ~summary:"Exercise 6: Best move?"
+      (let%map_open.Command () = return ()
+       and piece = piece_flag in
+       fun () ->
+         let best_move = findNextMove ~me:piece non_win in
+         print_s [%sexp (best_move : Game.Position.t)];
+         return ())
+  ;;
+
   let command =
     Command.group
       ~summary:"Exercises"
@@ -710,13 +764,16 @@ module Exercises = struct
       ; "three", exercise_three
       ; "four", exercise_four
       ; "five", exercise_five
+      ; "six", exercise_six
       ]
   ;;
 end
 
-let handle_take_turn (_client : unit) _query =
-  let piece = Game.Piece.X in
-  let position = { Game.Position.row = 0; column = 0 } in
+let handle_take_turn (_client : unit) (query : Rpcs.Take_turn.Query.t) =
+  let piece = query.you_play in
+  let game = query.game in
+  let position = Exercises.findNextMove game ~me:piece in
+
   let response = { Rpcs.Take_turn.Response.piece; position } in
   print_s [%message "Response" (response : Rpcs.Take_turn.Response.t)];
   return response
