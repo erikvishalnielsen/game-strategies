@@ -622,8 +622,8 @@ module Exercises = struct
       (* MY TURN *)
       match List.length getWinningMovesMe with 
       | 0 -> (match List.length getLosingMovesMe with 
-        | 0 -> 10 * depth
-        | 1 -> -10 * depth
+        | 0 -> 10
+        | 1 -> -10
         | _ -> -10000 * depth)
       | _ -> 10000 * depth
     )
@@ -631,8 +631,8 @@ module Exercises = struct
       (* OPP TURN *)
       match List.length getWinningMovesOpp with 
       | 0 -> (match List.length getLosingMovesOpp with 
-        | 0 -> -10 * depth
-        | 1 -> 10 * depth
+        | 0 -> -10
+        | 1 -> 10
         | _ -> 10000 * depth)
       | _ -> -10000 * depth
     )

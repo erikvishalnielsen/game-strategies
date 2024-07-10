@@ -622,8 +622,8 @@ module Exercises = struct
       (* MY TURN *)
       match List.length getWinningMovesMe with 
       | 0 -> (match List.length getLosingMovesMe with 
-        | 0 -> 10 * depth
-        | 1 -> -10 * depth
+        | 0 -> 10
+        | 1 -> -10
         | _ -> -10000 * depth)
       | _ -> 10000 * depth
     )
@@ -631,8 +631,8 @@ module Exercises = struct
       (* OPP TURN *)
       match List.length getWinningMovesOpp with 
       | 0 -> (match List.length getLosingMovesOpp with 
-        | 0 -> -10 * depth
-        | 1 -> 10 * depth
+        | 0 -> -10
+        | 1 -> 10
         | _ -> 10000 * depth)
       | _ -> -10000 * depth
     )
@@ -669,7 +669,7 @@ module Exercises = struct
     let rankedMoves = (List.sort allMoves ~compare:(fun move1 move2 -> 
       let newGame1 = place_piece game ~piece:(me) ~position:(move1) in
       let newGame2 = place_piece game ~piece:(me) ~position:(move2) in
-      if ((minimax ~depth:9 ~me:me newGame1 false) < (minimax ~depth:9 ~me:me newGame2 false)) then 1 else -1
+      if ((minimax ~depth:5 ~me:me newGame1 false) < (minimax ~depth:5 ~me:me newGame2 false)) then 1 else -1
     )) in 
     List.hd_exn rankedMoves (* IF ERROR ITS PROLLY THIS *)
   ;;
