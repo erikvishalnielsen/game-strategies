@@ -829,7 +829,10 @@ module Exercises = struct
   let findNextMove ~(me : Game.Piece.t) (game : Game.t) =
     let allMoves = available_moves game in
     match (game.game_kind) with 
-    | Omok -> (let maxMove = (List.fold allMoves ~init:(Int.min_value,{ Game.Position.row = -1; column = -1 }) ~f:(fun max move -> 
+    | Omok -> (
+      let winners = winning_moves ~me:me game in
+      if not (List.length winners = 0) then (List.hd_exn winners) else (
+      let maxMove = (List.fold allMoves ~init:(Int.min_value,{ Game.Position.row = -1; column = -1 }) ~f:(fun max move -> 
       let surroundingTiles = List.map Game.Position.all_offsets ~f:(fun funct -> funct move) in
       if (List.exists surroundingTiles ~f:(fun tile -> 
         match (Map.find game.board { Game.Position.row = tile.row; column = tile.column }) with 
@@ -837,16 +840,16 @@ module Exercises = struct
         | _ -> true
       )) then (
       let newGame = place_piece game ~piece:(me) ~position:(move) in
-      let var = omokMinimax ~depth:1 ~me:me newGame false in
+      let var = omokMinimax ~depth:1 ~me:me newGame false in (* CHANGE DEPTH HERE!! *)
       if var > fst max then var,move else max)
       else max)) in
     if (List.exists allMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 7; column = 7 })) then { Game.Position.row = 7; column = 7 } 
     else (if (List.exists allMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 8; column = 8 })) then { Game.Position.row = 8; column = 8 } 
-      else (snd maxMove))  (* IF ERROR ITS PROLLY THIS *))
+      else (snd maxMove)))  (* IF ERROR ITS PROLLY THIS *))
     | Tic_tac_toe -> (let rankedMoves = (List.sort allMoves ~compare:(fun move1 move2 -> 
       let newGame1 = place_piece game ~piece:(me) ~position:(move1) in
       let newGame2 = place_piece game ~piece:(me) ~position:(move2) in
-      if ((minimax ~depth:6 ~me:me newGame1 false) < (minimax ~depth:6 ~me:me newGame2 false)) then 1 else -1
+      if ((minimax ~depth:5 ~me:me newGame1 false) < (minimax ~depth:5 ~me:me newGame2 false)) then 1 else -1
     )) in 
     if (List.exists rankedMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 1; column = 1 })) then { Game.Position.row = 1; column = 1 } 
     else List.hd_exn rankedMoves (* IF ERROR ITS PROLLY THIS *))
