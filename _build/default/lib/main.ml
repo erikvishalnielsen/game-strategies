@@ -81,13 +81,13 @@ module Exercises = struct
       in
       List.iteri board ~f:(fun x row ->
         List.iteri row ~f:(fun y item ->
-          print_string item;
-          if not (y = 14) then print_string " | " else print_string "");
+          Core.print_string item;
+          if not (y = 14) then Core.print_string " | " else Core.print_string "");
         if not (x = 14)
         then (
-          print_endline "";
-          print_endline "---------")
-        else print_endline "")
+          Core.print_endline "";
+          Core.print_endline "---------")
+        else Core.print_endline "")
   ;;
 
   let%expect_test "print_win_for_x" =
@@ -148,8 +148,8 @@ module Exercises = struct
                match
                  Map.find game.board { Game.Position.row = x; column = y }
                with
-               | None -> None
-               | _ -> Some { Game.Position.row = x; column = y })))
+               | None -> Some { Game.Position.row = x; column = y }
+               | _ -> None)))
       in
       let finalList =
         List.filter posList ~f:(fun item ->
@@ -612,7 +612,7 @@ module Exercises = struct
     | _ -> []
   ;;
 
-  let heuristic ~(me : Game.Piece.t) (game : Game.t) ~isMax ~depth = 
+  let tictacHeur ~(me : Game.Piece.t) (game : Game.t) ~isMax ~depth = 
     let getLosingMovesMe = losing_moves ~me:me game in
     let getWinningMovesMe = winning_moves ~me:me game in
     let getLosingMovesOpp = losing_moves ~me:(Game.Piece.flip me) game in
@@ -624,8 +624,8 @@ module Exercises = struct
       | 0 -> (match List.length getLosingMovesMe with 
         | 0 -> 10
         | 1 -> -10
-        | _ -> -10000 * depth)
-      | _ -> 10000 * depth
+        | _ -> -10000000 * depth)
+      | _ -> 10000000 * depth
     )
     | false -> (
       (* OPP TURN *)
@@ -633,9 +633,171 @@ module Exercises = struct
       | 0 -> (match List.length getLosingMovesOpp with 
         | 0 -> -10
         | 1 -> 10
-        | _ -> 10000 * depth)
-      | _ -> -10000 * depth
+        | _ -> 10000000 * depth)
+      | _ -> -10000000 * depth
     )
+  ;;
+
+  let rowIn ~(game : Game.t) ~x ~y ~letter ~inBounds ~xFunct ~yFunct ~openBefore ~inARow ~openAfter : bool =
+    let desiredList = (List.init openBefore ~f:(fun _i -> None)) @ (List.init inARow ~f:(fun _i -> Some letter)) @ 
+      (List.init openAfter ~f:(fun _i -> None)) in
+    let yesOrNo = (
+      List.foldi
+        desiredList
+        ~f:(fun add bool desiredPiece ->
+          match inBounds ~x:(x + (xFunct*add)) ~y:(y + (yFunct*add)) with
+          | false -> bool
+          | true ->
+            let pieceOpt =
+              Map.find
+                game.board
+                { Game.Position.row = (x + (xFunct*add)); column = (y + (yFunct*add)) }
+            in
+            (match (pieceOpt, desiredPiece) with
+            | None, None -> bool
+            | Some piece, Some desired -> if (Game.Piece.equal piece desired) then bool else false
+            | _ -> false
+            ))
+        ~init:(true))
+    in
+    yesOrNo
+  ;;
+
+  let allDirs ~(game : Game.t) ~x ~y ~letter ~inBounds ~openBefore ~(inARow : int) ~openAfter ~posScore : int = 
+    let functHeur = [(0,1);(1,0);(1,1);(-1,1)] in
+    let finalSum = List.fold ~init:(0) functHeur ~f:(fun sum funct -> 
+      if (rowIn ~game ~x ~y ~letter ~inBounds ~xFunct:(fst funct) ~yFunct:(snd funct) ~openBefore ~inARow ~openAfter) then sum + posScore else sum
+    ) in
+    finalSum
+  ;;
+
+  let allMovesOmok = 
+    List.init 225 ~f:(fun num -> { Game.Position.row = num / 15; column = num % 15 })
+  ;;
+
+  let omokHeur ~(me : Game.Piece.t) (game : Game.t) = 
+    (*let getLosingMovesMe = losing_moves ~me:me game in
+    let getWinningMovesMe = winning_moves ~me:me game in
+    let getLosingMovesOpp = losing_moves ~me:(Game.Piece.flip me) game in
+    let getWinningMovesOpp = winning_moves ~me:(Game.Piece.flip me) game in *)
+
+    let inBounds ~x ~y =
+      if (x >= 0 && x < (Game.Game_kind.board_length game.Game.game_kind) && y >= 0 && y < (Game.Game_kind.board_length game.Game.game_kind))
+      then true
+      else false
+    in
+    let totalScore = List.fold ~init:(0) (allMovesOmok) ~f:(fun sum move -> (
+      let surroundingTiles = List.map Game.Position.all_offsets ~f:(fun funct -> funct move) in
+      if (List.exists surroundingTiles ~f:(fun tile -> 
+        match (Map.find game.board { Game.Position.row = tile.row; column = tile.column }) with 
+        | None -> false
+        | _ -> true
+      )) then (
+            sum + allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:100000000000 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:10000000 +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:100000 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:4 ~openAfter:1 ~posScore:100000 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:5000 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:0 ~posScore:100 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:3 ~openAfter:1 ~posScore:100 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:1 ~posScore:50 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:0 ~posScore:25 +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:2 ~openAfter:1 ~posScore:25 + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:(-1100000000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:(-110000000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:(-11000000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:0 ~inARow:4 ~openAfter:1 ~posScore:(-11000000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:(-11000) +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:0 ~posScore:(-10) +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:0 ~inARow:3 ~openAfter:1 ~posScore:(-10) +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:1 ~posScore:(-10) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:0 ~posScore:(-5) +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:0 ~inARow:2 ~openAfter:1 ~posScore:(-5)
+            )
+            
+            (*allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:(-100000000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:(-10000000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:(-10000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:4 ~openAfter:1 ~posScore:(-10000) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:(-475) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:0 ~posScore:(-15) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:3 ~openAfter:1 ~posScore:(-15) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:1 ~posScore:(-10) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:0 ~posScore:(-5) +
+            allDirs ~game ~x:move.row ~y:move.column ~letter:me ~inBounds ~openBefore:0 ~inARow:2 ~openAfter:1 ~posScore:(-5) )*)
+      else sum + 0)) in 
+            (*allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:0 ~posScore:(-75) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:1 ~posScore:(-25) + 
+            allDirs ~game ~x:move.row ~y:move.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:0 ~posScore:(-10)))*)
+    totalScore
+  ;;
+
+  let heuristic ~(me : Game.Piece.t) (game : Game.t) ~isMax ~depth = 
+    match game.game_kind with 
+    | Tic_tac_toe -> tictacHeur ~depth:(depth) ~me:me game ~isMax:(isMax)
+    | Omok -> omokHeur ~me:me game
+  ;;
+
+  let rec omokMinimax ~depth ~(me : Game.Piece.t) (game : Game.t) isMax = 
+    let _inBounds ~x ~y =
+      if (x >= 0 && x < (Game.Game_kind.board_length game.Game.game_kind) && y >= 0 && y < (Game.Game_kind.board_length game.Game.game_kind))
+      then true
+      else false
+    in
+    match depth = 0, evaluate game with 
+    | _, Game.Evaluation.Game_over {winner} -> (
+      match winner with
+      | None -> 0
+      | Some winnerPiece -> match (Game.Piece.equal me winnerPiece) with | true -> 10000000 * depth | false -> -10000000 * depth)
+    | true, _ -> heuristic ~me:me game ~isMax:isMax ~depth:depth
+    | _ -> (
+      match isMax with
+      | true -> (
+        List.fold (available_moves game) ~init:(-10000000 * depth) ~f:(fun value pos -> 
+          let newGame = 
+            place_piece game ~piece:(me) ~position:({ Game.Position.row = pos.row; column = pos.column })
+          in
+          (*let score = (allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:10000000 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:10000 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:(-7500) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:(-100000) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:(-100000) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:(-10000) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:5000 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:500 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:0 ~posScore:100 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:1 ~posScore:50 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:0 ~posScore:25) in
+          if (score > 0 && score > value / 2) then (Int.max (value) (omokMinimax ~depth:(depth-1) ~me:me newGame (not isMax))) else heuristic ~me:me newGame ~isMax:(not isMax) ~depth:depth-1*)
+          (*let score = (heuristic ~me:me newGame ~isMax:(not isMax) ~depth:depth-1) in
+          if (score >= value) then (Int.max (value) (omokMinimax ~depth:(depth-1) ~me:me newGame (not isMax))) else value*)
+
+          (Int.max (value) (omokMinimax ~depth:(depth-1)~me:me newGame (not isMax)))
+          ))
+      | false -> (
+        List.fold (available_moves game) ~init:(10000000 * depth) ~f:(fun value pos -> 
+          let newGame = 
+            place_piece game ~piece:(me) ~position:({ Game.Position.row = pos.row; column = pos.column })
+          in
+         (*let score = -1 * (allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:10000000 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:10000 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:(-7500) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:0 ~inARow:5 ~openAfter:0 ~posScore:(-100000) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:1 ~posScore:(-100000) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:(Game.Piece.flip me) ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:(-10000) +
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:4 ~openAfter:0 ~posScore:5000 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:1 ~posScore:500 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:3 ~openAfter:0 ~posScore:100 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:1 ~posScore:50 + 
+          allDirs ~game ~x:pos.row ~y:pos.column ~letter:me ~inBounds ~openBefore:1 ~inARow:2 ~openAfter:0 ~posScore:25) in 
+          if (score < 0 && score < value / 2) then (Int.min (value) (omokMinimax ~depth:(depth-1) ~me:me newGame (not isMax))) else (heuristic ~me:me newGame ~isMax:(not isMax) ~depth:depth-1) * -1 *)
+          (*let score = -1 * (heuristic ~me:(Game.Piece.flip me) newGame ~isMax:(not isMax) ~depth:depth-1) in
+          (* Core.print_s [%message "SCORE: " (score : int)]; *)
+          if (score <= value) then (Int.min (value) (omokMinimax ~depth:(depth-1) ~me:me newGame (not isMax))) else value*)
+
+          (Int.min (value) (omokMinimax ~depth:(depth-1)~me:me newGame (not isMax)))
+        )
+    ))
   ;;
 
   (* TRUE IS MAX FALSE IS MIN. MAX IS ALWAYS ME*)
@@ -645,18 +807,18 @@ module Exercises = struct
     | _, Game.Evaluation.Game_over {winner} -> (
       match winner with
       | None -> 0
-      | Some winnerPiece -> match (Game.Piece.equal me winnerPiece) with | true -> 10000 * depth | false -> -10000 * depth)
+      | Some winnerPiece -> match (Game.Piece.equal me winnerPiece) with | true -> 10000000 * depth | false -> -10000000 * depth)
     | true, _ -> curr_heuristic
     | _ -> (
       match isMax with
       | true -> (
-        List.fold (available_moves game) ~init:(-10000 * depth) ~f:(fun value pos -> 
+        List.fold (available_moves game) ~init:(-10000000 * depth) ~f:(fun value pos -> 
           let newGame = 
             place_piece game ~piece:(me) ~position:({ Game.Position.row = pos.row; column = pos.column })
           in
         (Int.max (value) (minimax ~depth:(depth-1) ~me:me newGame (not isMax)))))
       | false -> (
-        List.fold (available_moves game) ~init:(10000 * depth) ~f:(fun value pos -> 
+        List.fold (available_moves game) ~init:(10000000 * depth) ~f:(fun value pos -> 
           let newGame = 
             place_piece game ~piece:(Game.Piece.flip me) ~position:({ Game.Position.row = pos.row; column = pos.column })
           in
@@ -666,12 +828,28 @@ module Exercises = struct
 
   let findNextMove ~(me : Game.Piece.t) (game : Game.t) =
     let allMoves = available_moves game in
-    let rankedMoves = (List.sort allMoves ~compare:(fun move1 move2 -> 
+    match (game.game_kind) with 
+    | Omok -> (let maxMove = (List.fold allMoves ~init:(Int.min_value,{ Game.Position.row = -1; column = -1 }) ~f:(fun max move -> 
+      let surroundingTiles = List.map Game.Position.all_offsets ~f:(fun funct -> funct move) in
+      if (List.exists surroundingTiles ~f:(fun tile -> 
+        match (Map.find game.board { Game.Position.row = tile.row; column = tile.column }) with 
+        | None -> false
+        | _ -> true
+      )) then (
+      let newGame = place_piece game ~piece:(me) ~position:(move) in
+      let var = omokMinimax ~depth:1 ~me:me newGame false in
+      if var > fst max then var,move else max)
+      else max)) in
+    if (List.exists allMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 7; column = 7 })) then { Game.Position.row = 7; column = 7 } 
+    else (if (List.exists allMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 8; column = 8 })) then { Game.Position.row = 8; column = 8 } 
+      else (snd maxMove))  (* IF ERROR ITS PROLLY THIS *))
+    | Tic_tac_toe -> (let rankedMoves = (List.sort allMoves ~compare:(fun move1 move2 -> 
       let newGame1 = place_piece game ~piece:(me) ~position:(move1) in
       let newGame2 = place_piece game ~piece:(me) ~position:(move2) in
-      if ((minimax ~depth:5 ~me:me newGame1 false) < (minimax ~depth:5 ~me:me newGame2 false)) then 1 else -1
+      if ((minimax ~depth:6 ~me:me newGame1 false) < (minimax ~depth:6 ~me:me newGame2 false)) then 1 else -1
     )) in 
-    List.hd_exn rankedMoves (* IF ERROR ITS PROLLY THIS *)
+    if (List.exists rankedMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 1; column = 1 })) then { Game.Position.row = 1; column = 1 } 
+    else List.hd_exn rankedMoves (* IF ERROR ITS PROLLY THIS *))
   ;;
 
   let exercise_one =
@@ -755,6 +933,33 @@ module Exercises = struct
          print_s [%sexp (best_move : Game.Position.t)];
          return ())
   ;;
+  let exercise_seven =
+    Command.async
+      ~summary:"Exercise 7: Omok against self"
+      (let%map_open.Command () = return ()
+       and piece = piece_flag in
+       fun () ->
+         Core.print_s [%message "starting"];
+         let list = List.init 225 ~f:(fun i -> i) in
+         Core.print_s [%message (List.length list : int)];
+         let _winner =
+           List.fold
+             list
+             ~init:(Game.empty Game.Game_kind.Omok, piece)
+             ~f:(fun (board, piece) _num ->
+               Core.print_s [%message "BOARD: "];
+               let best_move =
+                 findNextMove board ~me:piece
+               in
+               Core.print_s [%message (best_move : Game.Position.t)];
+               let new_board, next_piece =
+                 place_piece board ~piece ~position:best_move, Game.Piece.flip piece
+               in
+               print_game new_board;
+               new_board, next_piece)
+         in
+         return ())
+  ;;
 
   let command =
     Command.group
@@ -765,6 +970,7 @@ module Exercises = struct
       ; "four", exercise_four
       ; "five", exercise_five
       ; "six", exercise_six
+      ; "seven", exercise_seven
       ]
   ;;
 end
