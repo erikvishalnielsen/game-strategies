@@ -830,7 +830,7 @@ module Exercises = struct
     let allMoves = available_moves game in
     match (game.game_kind) with 
     | Omok -> (
-      let winners = winning_moves ~me:me game in
+      let winners = (winning_moves ~me:me game) @ (losing_moves ~me:me game) in
       if not (List.length winners = 0) then (List.hd_exn winners) else (
       let maxMove = (List.fold allMoves ~init:(Int.min_value,{ Game.Position.row = -1; column = -1 }) ~f:(fun max move -> 
       let surroundingTiles = List.map Game.Position.all_offsets ~f:(fun funct -> funct move) in
@@ -840,7 +840,7 @@ module Exercises = struct
         | _ -> true
       )) then (
       let newGame = place_piece game ~piece:(me) ~position:(move) in
-      let var = omokMinimax ~depth:1 ~me:me newGame false in (* CHANGE DEPTH HERE!! *)
+      let var = omokMinimax ~depth:0 ~me:me newGame false in (* CHANGE DEPTH HERE!! *)
       if var > fst max then var,move else max)
       else max)) in
     if (List.exists allMoves ~f:(fun move -> Game.Position.equal move { Game.Position.row = 7; column = 7 })) then { Game.Position.row = 7; column = 7 } 
